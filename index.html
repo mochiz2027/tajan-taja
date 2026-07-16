@@ -1,0 +1,1016 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>달려라 타잔 - 레트로 타자 게임</title>
+    <style>
+        /* 레트로 픽셀 아트 느낌을 위한 폰트 설정 */
+        @import url('https://fonts.googleapis.com/css2?family=Galmuri11:wght@700&display=swap');
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Galmuri11', 'DungGeunMo', sans-serif;
+            user-select: none;
+        }
+
+        body {
+            background-color: #0c0f12;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* 16:9 비율 유지용 가상 캔버스 컨테이너 */
+        #game-container {
+            position: relative;
+            width: 1280px;
+            height: 720px;
+            background-color: #000;
+            overflow: hidden;
+            box-shadow: 0 0 40px rgba(0, 0, 0, 0.9);
+            border: 6px solid #1a222d;
+            border-radius: 8px;
+        }
+
+        /* 공통 화면 레이어 */
+        .screen {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            display: none;
+            background-size: 100% 100%;
+            background-repeat: no-repeat;
+            background-position: center;
+            image-rendering: pixelated;
+        }
+
+        .active {
+            display: block;
+        }
+
+        /* --- 1. 시작 화면 --- */
+        #screen-title {
+            background-image: url('Change_background_to_jungle_202607152233.jpeg');
+        }
+        /* 투명한 플레이 버튼 오버레이 (이미지 글자 위치와 일치) */
+        #btn-start-overlay {
+            position: absolute;
+            left: 520px;
+            bottom: 53px;
+            width: 240px;
+            height: 60px;
+            cursor: pointer;
+            background: rgba(255, 255, 255, 0); /* 완전 투명 */
+            border: none;
+            outline: none;
+        }
+        #btn-start-overlay:hover {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+        }
+
+        /* --- 2. 스토리 대화 화면 --- */
+        #screen-dialogue {
+            background-image: url('Character_sheet_front_side_back_202607152226.jpeg');
+        }
+        /* 우측 상단 START 버튼 투명 오버레이 */
+        #btn-dialogue-start-overlay {
+            position: absolute;
+            right: 43px;
+            top: 40px;
+            width: 250px;
+            height: 75px;
+            cursor: pointer;
+            background: rgba(255, 255, 255, 0);
+            border: none;
+            outline: none;
+        }
+        #btn-dialogue-start-overlay:hover {
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 6px;
+        }
+        /* 하단 검은색 대화창 오버레이 (기존 텍스트 가림 및 타이핑 렌더용) */
+        .dialogue-box-overlay {
+            position: absolute;
+            bottom: 50px;
+            left: 60px;
+            width: 1160px;
+            height: 180px;
+            background: rgba(5, 5, 10, 0.95);
+            border: 6px double #ffffff;
+            padding: 30px 40px;
+            color: #ffffff;
+            font-size: 28px;
+            line-height: 1.6;
+            letter-spacing: 1px;
+            box-shadow: 0 0 15px rgba(0,0,0,0.5);
+        }
+        .dialogue-speaker {
+            color: #ffcc00;
+            font-weight: bold;
+            margin-bottom: 12px;
+            font-size: 32px;
+        }
+        .dialogue-text {
+            word-break: keep-all;
+        }
+        .dialogue-blink-arrow {
+            position: absolute;
+            right: 30px;
+            bottom: 20px;
+            font-size: 24px;
+            color: #ffcc00;
+            animation: arrow-blink 0.8s infinite steps(2);
+        }
+        @keyframes arrow-blink {
+            0% { opacity: 0; }
+            100% { opacity: 1; }
+        }
+
+        /* --- 3. 달리기 화면 (스테이지 전환) --- */
+        #screen-run {
+            background-color: #0c0f12;
+            overflow: hidden;
+        }
+        /* 달리기 배경: 동적 생성된 깨끗한 정글 배경을 무한 루프로 스크롤 */
+        #run-scroller {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 1280px;
+            height: 720px;
+            background-repeat: repeat-x;
+            background-position: 0px bottom;
+            background-size: 1280px 720px;
+            image-rendering: pixelated;
+        }
+        /* 배경 무한 루프 스크롤 애니메이션 (우측에서 좌측으로 흐름) */
+        @keyframes bg-scroll {
+            0% { background-position-x: 0px; }
+            100% { background-position-x: -1280px; }
+        }
+        .bg-scrolling {
+            animation: bg-scroll 4s linear infinite;
+        }
+        /* 움직이는 타잔 러너 컨테이너 (물리 좌표 left 이동) */
+        #tarzan-runner-container {
+            position: absolute;
+            left: 120px;
+            top: 285px;
+            width: 240px;
+            height: 410px;
+            z-index: 5;
+            transform-origin: bottom center;
+        }
+        /* 타잔 캐릭터 이미지 (배경 없는 누끼 PNG 직접 사용) */
+        #tarzan-runner {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            image-rendering: pixelated;
+        }
+        /* 타잔 달리기 애니메이션: 자연스러운 상하 바운스 */
+        .tarzan-bobbing {
+            animation: tarzan-bob-anim 0.22s infinite alternate ease-in-out;
+            transform-origin: bottom center;
+        }
+        @keyframes tarzan-bob-anim {
+            0%   { transform: translateY(0px); }
+            100% { transform: translateY(-12px); }
+        }
+        /* 달리기 중 화면 전체 미세 진동 */
+        .run-screen-shake {
+            animation: run-shake-anim 0.15s infinite alternate;
+        }
+        @keyframes run-shake-anim {
+            0%   { transform: translate(0px, 0px); }
+            100% { transform: translate(0px, -2px); }
+        }
+        /* 스테이지 중앙 알림 배너 */
+        #stage-banner {
+            position: absolute;
+            top: 30%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.85);
+            color: #ffcc00;
+            padding: 25px 60px;
+            border: 4px solid #ffcc00;
+            font-size: 48px;
+            border-radius: 8px;
+            box-shadow: 0 0 25px rgba(0,0,0,0.6);
+            letter-spacing: 2px;
+            animation: banner-pop 0.5s ease-out;
+            text-align: center;
+            z-index: 10;
+        }
+        @keyframes banner-pop {
+            0% { transform: translate(-50%, -50%) scale(0.7); opacity: 0; }
+            100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+        }
+
+        /* --- 4. 타자 게임 화면 --- */
+        #screen-typing {
+            background-image: url('Jungle_background_Korean_text_chal_202607152250.jpeg');
+        }
+        /* 이미지 내 기존 문제 텍스트를 가리기 위한 아이보리 마스크 */
+        .typing-mask-box {
+            position: absolute;
+            left: 185px;
+            top: 205px;
+            width: 910px;
+            height: 350px;
+            background-color: #faf8f5;
+            border-radius: 12px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 30px;
+        }
+        /* 문제 문장 스타일 */
+        .typing-sentence {
+            font-size: 42px;
+            color: #1a1a1a;
+            text-align: center;
+            margin-bottom: 50px;
+            word-break: keep-all;
+            line-height: 1.4;
+            letter-spacing: 1px;
+        }
+        /* 디자인이 가미된 레트로 타자 입력 상자 */
+        #type-input-overlay {
+            position: absolute;
+            left: 195px;
+            top: 502px;
+            width: 725px;
+            height: 54px;
+            background: #ffffff;
+            border: 4px solid #354f75;
+            border-radius: 6px;
+            outline: none;
+            font-size: 24px;
+            font-family: 'Galmuri11', sans-serif;
+            color: #111;
+            padding: 0 15px;
+            letter-spacing: 1px;
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.15), 0 2px 0px rgba(0,0,0,0.2);
+        }
+        #type-input-overlay:focus {
+            border-color: #ffcc00; /* 포커스 시 노란 테두리 */
+        }
+        /* 오타 발생 시 빨간 테두리 피드백 */
+        #type-input-overlay.input-wrong {
+            border-color: #ff3333 !important;
+            background-color: #fff0f0;
+        }
+        /* 투명 엔터 버튼 오버레이 */
+        #btn-typing-enter-overlay {
+            position: absolute;
+            left: 935px;
+            top: 505px;
+            width: 150px;
+            height: 50px;
+            cursor: pointer;
+            background: rgba(255, 255, 255, 0);
+            border: none;
+            outline: none;
+        }
+        #btn-typing-enter-overlay:hover {
+            background: rgba(255, 255, 255, 0.15);
+        }
+        /* 투명 나가기 버튼 오버레이 (우측 하단) */
+        #btn-typing-exit-overlay {
+            position: absolute;
+            right: 15px;
+            bottom: 15px;
+            padding: 10px 20px;
+            background: rgba(0,0,0,0.7);
+            border: 2px solid #fff;
+            color: #fff;
+            font-size: 16px;
+            cursor: pointer;
+            border-radius: 4px;
+            transition: all 0.2s;
+        }
+        #btn-typing-exit-overlay:hover {
+            background: #ff3333;
+            border-color: #ff3333;
+        }
+        /* 이미지 내 하트(라이프) 가림용 오버레이 - 단색 사각형으로 확실하게 덮기 */
+        .heart-hide-patch {
+            position: absolute;
+            width: 55px;
+            height: 50px;
+            background-color: #3370AD; /* 이미지 내 하트 영역 배경 파란색 (픽셀 분석 결과) */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 99;
+        }
+        /* 각 하트별 정밀 좌표 매핑 (이미지 픽셀 스캔으로 확인한 실제 좌표) */
+        #heart-hide-1 { left: 325px; top: 562px; }
+        #heart-hide-2 { left: 378px; top: 562px; }
+        #heart-hide-3 { left: 430px; top: 562px; }
+        #heart-hide-4 { left: 482px; top: 562px; }
+        #heart-hide-5 { left: 532px; top: 562px; }
+
+        /* 타이머 오버레이 바 (기존 이미지 내 게이지 바 안쪽에만 딱 맞춤) */
+        .timer-bar-overlay {
+            position: absolute;
+            left: 808px;
+            top: 582px;
+            width: 231px;
+            height: 14px;
+            background-color: #ffcc00;
+            transition: width 0.1s linear;
+            z-index: 98; /* 기존 프레임 내부 파란색 위에 덮음 */
+        }
+        /* 타이머 텍스트 오버레이 (기존 이미지 내 노란색 13을 완벽히 가림) */
+        .timer-text-overlay {
+            position: absolute;
+            left: 1040px;
+            top: 573px;
+            width: 50px;
+            height: 30px;
+            background-color: #1a396d; /* 배경 파란색으로 밑의 13을 덮음 */
+            font-size: 20px;
+            color: #ffcc00;
+            font-weight: bold;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+        }
+        /* 문제 개수 진행도 마스크 영역 */
+        .progress-mask {
+            position: absolute;
+            left: 1010px;
+            top: 220px;
+            width: 70px;
+            height: 30px;
+            background-color: #faf8f5;
+            font-size: 20px;
+            color: #333;
+            font-weight: bold;
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            padding-right: 5px;
+        }
+
+        /* 오타 발생 시의 화면 흔들림 효과 */
+        .wrong-shake {
+            animation: wrong-shake-anim 0.3s ease-in-out;
+            border-color: #ff3333 !important;
+        }
+        @keyframes wrong-shake-anim {
+            0%, 100% { transform: translateX(0); }
+            20%, 60% { transform: translateX(-10px); }
+            40%, 80% { transform: translateX(10px); }
+        }
+
+        /* --- 5. 게임 오버 화면 --- */
+        #screen-gameover {
+            background-image: url('Change_character_Tarzan_monkey_stretching_202607152248.jpeg');
+        }
+        /* RETRY 버튼 오버레이 */
+        #btn-retry-overlay {
+            position: absolute;
+            left: 475px;
+            top: 420px;
+            width: 330px;
+            height: 75px;
+            cursor: pointer;
+            background: rgba(255, 255, 255, 0);
+            border: none;
+            outline: none;
+        }
+        #btn-retry-overlay:hover {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 6px;
+        }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+
+    <!-- 1. 시작 화면 -->
+    <div id="screen-title" class="screen active">
+        <button id="btn-start-overlay" title="게임 시작"></button>
+    </div>
+
+    <!-- 2. 스토리 대화 화면 -->
+    <div id="screen-dialogue" class="screen">
+        <button id="btn-dialogue-start-overlay" title="대화 넘기기"></button>
+        <div class="dialogue-box-overlay">
+            <div class="dialogue-speaker">타잔</div>
+            <div class="dialogue-text" id="dialogue-text"></div>
+            <div class="dialogue-blink-arrow">▶</div>
+        </div>
+    </div>
+
+    <!-- 3. 달리기 화면 (스테이지 전환) -->
+    <div id="screen-run" class="screen run-screen-shake">
+        <div id="run-scroller"></div>
+        <div id="tarzan-runner-container">
+            <img id="tarzan-runner" src="Tarzanpass.png" alt="타잔">
+        </div>
+        <div id="stage-banner">STAGE 1</div>
+    </div>
+
+    <!-- 4. 타자 게임 화면 -->
+    <div id="screen-typing" class="screen">
+        <!-- 자동 완성 테스트용 히든 치트 버튼 -->
+        <button id="cheat-fill-btn" style="position: absolute; top: 15px; left: 15px; z-index: 100; padding: 6px 12px; background: rgba(0,0,0,0.6); color: #00ff00; border: 2px solid #00ff00; border-radius: 4px; cursor: pointer; font-size: 14px; font-family: 'Galmuri11', sans-serif;" onclick="document.getElementById('type-input-overlay').value = document.getElementById('target-sentence').innerText; document.getElementById('type-input-overlay').focus();">치트키(Auto-Fill)</button>
+
+        <!-- 기존 텍스트를 덮고 동적으로 표시할 영역 -->
+        <div class="typing-mask-box">
+            <div class="typing-sentence" id="target-sentence">우가차카 우가차카! 타잔이 나가신다</div>
+        </div>
+
+        <!-- 실시간 스테이지 진행도 -->
+        <div class="progress-mask" id="progress-text">1 / 5</div>
+
+        <!-- 하트 가리기 패널들 (소진 시 화면에서 숨기기 위해 배경색 패널을 얹음) -->
+        <div id="heart-hide-1" class="heart-hide-patch"></div>
+        <div id="heart-hide-2" class="heart-hide-patch"></div>
+        <div id="heart-hide-3" class="heart-hide-patch"></div>
+        <div id="heart-hide-4" class="heart-hide-patch"></div>
+        <div id="heart-hide-5" class="heart-hide-patch"></div>
+
+        <!-- 타이머 인터랙티브 바 -->
+        <div class="timer-bar-overlay" id="timer-bar"></div>
+        <div class="timer-text-overlay" id="timer-text">15</div>
+
+        <!-- 텍스트 입력부 -->
+        <input type="text" id="type-input-overlay" placeholder="여기에 똑같이 입력하고 ENTER!" autocomplete="off" spellcheck="false">
+        <button id="btn-typing-enter-overlay" title="입력 완료"></button>
+
+        <!-- 나가기 버튼 -->
+        <button id="btn-typing-exit-overlay" onclick="goToTitle()">나가기</button>
+    </div>
+
+    <!-- 5. 게임 오버 화면 -->
+    <div id="screen-gameover" class="screen">
+        <button id="btn-retry-overlay" title="다시 하기"></button>
+    </div>
+
+</div>
+
+<script>
+    // --- 레트로 사운드 오디오 신디사이저 (Web Audio API) ---
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+    // --- BGM 배경 음악 신디사이저 (8비트 정글풍 레트로 루프) ---
+    let bgmInterval = null;
+    let bgmStep = 0;
+    const bgmNotes = [
+        110, 110, 130, 110,  146, 110, 130, 146,
+        110, 110, 130, 110,  98,  110, 130, 98
+    ]; // 정글풍 아케이드 베이스 루프
+    
+    function playBGM() {
+        if (audioCtx.state === 'suspended') {
+            audioCtx.resume();
+        }
+        if (bgmInterval) return; // 이미 재생 중이면 리턴
+        
+        bgmStep = 0;
+        bgmInterval = setInterval(() => {
+            const now = audioCtx.currentTime;
+            
+            // 1. 베이스 리프 (Triangle 파형)
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            
+            osc.type = 'triangle';
+            const freq = bgmNotes[bgmStep % bgmNotes.length];
+            osc.frequency.setValueAtTime(freq, now);
+            
+            gain.gain.setValueAtTime(0.05, now);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+            
+            osc.start(now);
+            osc.stop(now + 0.2);
+            
+            // 2. 킥 드럼 (4비트 타악기 비트)
+            if (bgmStep % 4 === 0) {
+                const oscKick = audioCtx.createOscillator();
+                const gainKick = audioCtx.createGain();
+                oscKick.connect(gainKick);
+                gainKick.connect(audioCtx.destination);
+                
+                oscKick.type = 'sine';
+                oscKick.frequency.setValueAtTime(120, now);
+                oscKick.frequency.exponentialRampToValueAtTime(0.01, now + 0.12);
+                
+                gainKick.gain.setValueAtTime(0.12, now);
+                gainKick.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+                
+                oscKick.start(now);
+                oscKick.stop(now + 0.12);
+            }
+            
+            // 3. 쉭-하는 노이즈 스네어 (8박자 싱코페이션 타악기)
+            if (bgmStep % 8 === 4) {
+                const bufferSize = audioCtx.sampleRate * 0.08;
+                const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+                const data = buffer.getChannelData(0);
+                for (let i = 0; i < bufferSize; i++) {
+                    data[i] = Math.random() * 2 - 1;
+                }
+                
+                const noise = audioCtx.createBufferSource();
+                noise.buffer = buffer;
+                
+                const noiseFilter = audioCtx.createBiquadFilter();
+                noiseFilter.type = 'bandpass';
+                noiseFilter.frequency.value = 1000;
+                
+                const noiseGain = audioCtx.createGain();
+                
+                noise.connect(noiseFilter);
+                noiseFilter.connect(noiseGain);
+                noiseGain.connect(audioCtx.destination);
+                
+                noiseGain.gain.setValueAtTime(0.03, now);
+                noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.07);
+                
+                noise.start(now);
+                noise.stop(now + 0.08);
+            }
+            
+            bgmStep++;
+        }, 180); // 약 130 BPM 정도의 8비트 속도
+    }
+    
+    function stopBGM() {
+        if (bgmInterval) {
+            clearInterval(bgmInterval);
+            bgmInterval = null;
+        }
+    }
+
+    function playSound(type) {
+        if (audioCtx.state === 'suspended') {
+            audioCtx.resume();
+        }
+        const now = audioCtx.currentTime;
+        
+        switch (type) {
+            case 'click': // 타이핑 키 및 틱 효과음
+                const oscClick = audioCtx.createOscillator();
+                const gainClick = audioCtx.createGain();
+                oscClick.connect(gainClick);
+                gainClick.connect(audioCtx.destination);
+                oscClick.type = 'triangle';
+                oscClick.frequency.setValueAtTime(600, now);
+                oscClick.frequency.exponentialRampToValueAtTime(100, now + 0.05);
+                gainClick.gain.setValueAtTime(0.08, now);
+                gainClick.gain.linearRampToValueAtTime(0.001, now + 0.05);
+                oscClick.start(now);
+                oscClick.stop(now + 0.05);
+                break;
+
+            case 'select': // 메뉴 선택 효과음
+                const oscSel = audioCtx.createOscillator();
+                const gainSel = audioCtx.createGain();
+                oscSel.connect(gainSel);
+                gainSel.connect(audioCtx.destination);
+                oscSel.type = 'square';
+                oscSel.frequency.setValueAtTime(400, now);
+                oscSel.frequency.setValueAtTime(800, now + 0.08);
+                gainSel.gain.setValueAtTime(0.08, now);
+                gainSel.gain.linearRampToValueAtTime(0.001, now + 0.2);
+                oscSel.start(now);
+                oscSel.stop(now + 0.2);
+                break;
+
+            case 'correct': // 정답 효과음
+                const oscCorr = audioCtx.createOscillator();
+                const gainCorr = audioCtx.createGain();
+                oscCorr.connect(gainCorr);
+                gainCorr.connect(audioCtx.destination);
+                oscCorr.type = 'sine';
+                oscCorr.frequency.setValueAtTime(523.25, now); // C5
+                oscCorr.frequency.setValueAtTime(659.25, now + 0.08); // E5
+                oscCorr.frequency.setValueAtTime(783.99, now + 0.16); // G5
+                oscCorr.frequency.setValueAtTime(1046.50, now + 0.24); // C6
+                gainCorr.gain.setValueAtTime(0.06, now);
+                gainCorr.gain.linearRampToValueAtTime(0.001, now + 0.35);
+                oscCorr.start(now);
+                oscCorr.stop(now + 0.35);
+                break;
+
+            case 'wrong': // 오타/시간초과 실패음
+                const oscWrong = audioCtx.createOscillator();
+                const gainWrong = audioCtx.createGain();
+                oscWrong.connect(gainWrong);
+                gainWrong.connect(audioCtx.destination);
+                oscWrong.type = 'sawtooth';
+                oscWrong.frequency.setValueAtTime(180, now);
+                oscWrong.frequency.linearRampToValueAtTime(90, now + 0.25);
+                gainWrong.gain.setValueAtTime(0.12, now);
+                gainWrong.gain.linearRampToValueAtTime(0.001, now + 0.25);
+                oscWrong.start(now);
+                oscWrong.stop(now + 0.25);
+                break;
+
+            case 'clear': // 스테이지 전체 클리어 축하 팡파르
+                const notes = [523.25, 523.25, 523.25, 523.25, 659.25, 587.33, 659.25, 783.99, 1046.50];
+                const durations = [0.1, 0.1, 0.1, 0.2, 0.1, 0.1, 0.1, 0.1, 0.4];
+                let timeOffset = 0;
+                notes.forEach((freq, idx) => {
+                    const noteOsc = audioCtx.createOscillator();
+                    const noteGain = audioCtx.createGain();
+                    noteOsc.connect(noteGain);
+                    noteGain.connect(audioCtx.destination);
+                    noteOsc.type = 'square';
+                    noteOsc.frequency.setValueAtTime(freq, now + timeOffset);
+                    noteGain.gain.setValueAtTime(0.06, now + timeOffset);
+                    noteGain.gain.linearRampToValueAtTime(0.001, now + timeOffset + durations[idx]);
+                    noteOsc.start(now + timeOffset);
+                    noteOsc.stop(now + timeOffset + durations[idx]);
+                    timeOffset += durations[idx] + 0.02;
+                });
+                break;
+
+            case 'gameover': // 게임오버 하강음
+                const goNotes = [392.00, 349.23, 311.13, 261.63]; // G4 -> F4 -> Eb4 -> C4
+                let goOffset = 0;
+                goNotes.forEach((freq, idx) => {
+                    const noteOsc = audioCtx.createOscillator();
+                    const noteGain = audioCtx.createGain();
+                    noteOsc.connect(noteGain);
+                    noteGain.connect(audioCtx.destination);
+                    noteOsc.type = 'sawtooth';
+                    noteOsc.frequency.setValueAtTime(freq, now + goOffset);
+                    noteGain.gain.setValueAtTime(0.08, now + goOffset);
+                    noteGain.gain.linearRampToValueAtTime(0.001, now + goOffset + 0.25);
+                    noteOsc.start(now + goOffset);
+                    noteOsc.stop(now + goOffset + 0.25);
+                    goOffset += 0.22;
+                });
+                break;
+        }
+    }
+
+    // --- 게임 상태 및 데이터 저장소 ---
+    // 스테이지별 고유 문장 은행 (스테이지 상승에 따른 길이 및 난이도 증가)
+    const stageSentences = {
+        1: [
+            "우가차카 우가차카! 타잔이 나가신다",
+            "나는 밀림의 수호자 타잔이다",
+            "원숭이야 나랑 바나나 먹자",
+            "넝쿨을 타고 신나게 날아간다",
+            "정글의 아침은 매우 조용하다"
+        ],
+        2: [
+            "원숭이와 함께 넝쿨을 타고 정글을 달린다",
+            "동굴 속에는 어떤 비밀 스테이지가 기다릴까",
+            "정글의 평화를 위협하는 사냥꾼들을 막아라",
+            "바나나를 맛있게 먹는 타잔의 하루 일과",
+            "재빠른 몸놀림으로 표범의 습격을 피하자"
+        ],
+        3: [
+            "아아아~ 아주 우렁찬 타잔의 목소리가 숲속에 울려퍼진다",
+            "자연과 하나가 되어 숲을 수호하는 위대한 영웅 타잔",
+            "정글의 아침은 시끄러운 새소리와 원숭이 울음소리로 시작된다",
+            "악어와 눈이 마주쳤을 때는 당황하지 말고 침착하게 피하자",
+            "밀림의 법칙에 따라 욕심부리지 말고 자연을 사랑하자"
+        ]
+    };
+
+    // 4단계 이후에 제공되는 매우 길고 고난이도의 정글 문장들
+    const hardSentencesPool = [
+        "치타보다 빠른 몸놀림과 강인한 체력으로 정글의 온갖 난관을 극복해 나간다",
+        "원숭이가 던진 단단한 코코넛을 머리로 가볍게 받아내는 묘기를 부려보자",
+        "정글의 밤하늘은 아름다운 은하수와 반짝이는 별빛들로 가득 채워져 있다",
+        "폭포수 아래에서 득음 훈련을 하며 목소리를 가다듬는 타잔의 모습은 용맹하다",
+        "넝쿨을 잡고 허공을 가르며 날아오를 때 느끼는 정글의 시원한 바람 소리"
+    ];
+
+    // 스테이지 번호에 최적화된 5문장 추출 함수
+    function getStageSentences(stage) {
+        if (stageSentences[stage]) {
+            return [...stageSentences[stage]].sort(() => 0.5 - Math.random());
+        }
+        // 4단계 이상부터는 하드코어 풀에서 랜덤 선택
+        return [...hardSentencesPool].sort(() => 0.5 - Math.random()).slice(0, 5);
+    }
+
+    let currentStage = 1;
+    let currentSentenceIndex = 0;
+    let currentSentences = [];
+    let lives = 5;
+    let timerId = null;
+    let timeLeft = 15;
+    let maxTimePerSentence = 15;
+
+    // DOM 캐싱
+    const screens = {
+        title: document.getElementById('screen-title'),
+        dialogue: document.getElementById('screen-dialogue'),
+        run: document.getElementById('screen-run'),
+        typing: document.getElementById('screen-typing'),
+        gameover: document.getElementById('screen-gameover')
+    };
+
+    const dialogueText = document.getElementById('dialogue-text');
+    const stageBanner = document.getElementById('stage-banner');
+    const targetSentenceDisp = document.getElementById('target-sentence');
+    const typeInput = document.getElementById('type-input-overlay');
+    const progressDisp = document.getElementById('progress-text');
+    const timerBar = document.getElementById('timer-bar');
+    const timerText = document.getElementById('timer-text');
+    const gameContainer = document.getElementById('game-container');
+
+    // --- 화면 이동 제어 ---
+    function showScreen(screenKey) {
+        Object.values(screens).forEach(screen => screen.classList.remove('active'));
+        screens[screenKey].classList.add('active');
+    }
+
+    // --- 이벤트 리스너 설정 ---
+    // 1) 시작 화면 버튼 클릭
+    document.getElementById('btn-start-overlay').addEventListener('click', onStartGame);
+    
+    // 2) 스토리 화면 대화 넘기기 클릭
+    document.getElementById('btn-dialogue-start-overlay').addEventListener('click', skipDialogue);
+    
+    // 3) 타자 입력 및 엔터
+    document.getElementById('btn-typing-enter-overlay').addEventListener('click', checkAnswer);
+    typeInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            checkAnswer();
+        }
+    });
+
+    // 4) 게임 오버 화면 다시 시작
+    document.getElementById('btn-retry-overlay').addEventListener('click', () => {
+        playSound('select');
+        currentStage = 1;
+        lives = 5;
+        resetHeartPatches();
+        onStartGame();
+    });
+
+    // 5) 전역 단축키 처리
+    window.addEventListener('keydown', (e) => {
+        // 타이틀 화면에서 엔터 시 게임 시작
+        if (screens.title.classList.contains('active') && e.key === 'Enter') {
+            onStartGame();
+        }
+        // 대화 화면에서 스페이스 또는 엔터 시 스킵
+        else if (screens.dialogue.classList.contains('active') && (e.key === ' ' || e.key === 'Enter')) {
+            e.preventDefault();
+            skipDialogue();
+        }
+    });
+
+    // --- 게임 흐름 제어 로직 ---
+
+    // --- 게임 흐름 제어 로직 ---
+
+    // 게임 시작 버튼 누를 때 (canvas 없이 직접 이미지 사용 - CORS 에러 회피)
+    function onStartGame() {
+        playSound('select');
+        
+        // 달리기 배경에 정글 이미지 직접 지정 (배경은 고정, 타잔만 이동)
+        document.getElementById('run-scroller').style.backgroundImage = 
+            "url('bg_no_tarzan.jpg')";
+        
+        showScreen('dialogue');
+        startDialogueScene();
+    }
+
+    // 대화 시작
+    let dialogueTextIndex = 0;
+    const dialogueScript = "나는 밀림의 수호자! 나는 문명을 개척해야 해!";
+    let dialogueInterval = null;
+
+    function startDialogueScene() {
+        dialogueText.innerText = "";
+        dialogueTextIndex = 0;
+        clearInterval(dialogueInterval);
+
+        // 한 글자씩 타이핑 효과 연출
+        dialogueInterval = setInterval(() => {
+            if (dialogueTextIndex < dialogueScript.length) {
+                dialogueText.innerText += dialogueScript[dialogueTextIndex];
+                dialogueTextIndex++;
+                playSound('click'); // 글자마다 미세 틱 소리
+            } else {
+                clearInterval(dialogueInterval);
+            }
+        }, 80);
+    }
+
+    function skipDialogue() {
+        clearInterval(dialogueInterval);
+        playSound('select');
+        enterRunStage();
+    }
+
+    // 달리기 화면으로 진입 (배경은 고정, 타잔 캐릭터만 왼쪽에서 오른쪽으로 질주 연출)
+    function enterRunStage() {
+        showScreen('run');
+        stageBanner.innerText = `STAGE ${currentStage}`;
+        
+        // 배경음악(BGM) 재생 시작
+        playBGM();
+        
+        const container = document.getElementById('tarzan-runner-container');
+        const runner = document.getElementById('tarzan-runner');
+        
+        // --- 0단계: 연출 전 위치 초기화 ---
+        container.style.transition = 'none';
+        container.style.left = '120px'; // 화면 빨간색 표시한 위치에서 시작 (확대 및 크기 축소 고려)
+        container.style.transform = 'scale(1)';
+        container.style.opacity = '1';
+        runner.classList.remove('tarzan-bobbing');
+        
+        // 브라우저 리플로우 유도
+        container.offsetHeight;
+        
+        // 1단계 (0.1초~3.3초): 타잔이 화면 밖에서 출발하여 950px(동굴 앞)까지 고정 배경 위를 질주
+        setTimeout(() => {
+            container.style.transition = 'left 3.2s linear';
+            container.style.left = '950px';
+            runner.classList.add('tarzan-bobbing');
+        }, 100);
+
+        // 2단계 (3.4초~4.2초): 동굴 입구에서 점점 작아지며 안으로 빨려 들어감
+        setTimeout(() => {
+            container.style.transition = 'left 0.8s ease-in, transform 0.8s ease-in, opacity 0.8s ease-in';
+            container.style.left = '1100px';
+            container.style.transform = 'scale(0.3)';
+            container.style.opacity = '0';
+        }, 3400);
+
+        // 3단계 (4.3초): 씬 종료 후 타자 게임 시작
+        setTimeout(() => {
+            runner.classList.remove('tarzan-bobbing');
+            container.style.opacity = '1';
+            container.style.transform = 'scale(1)';
+            startTypingGame();
+        }, 4300);
+    }
+
+    // 타자 게임 시작
+    function startTypingGame() {
+        showScreen('typing');
+        currentSentenceIndex = 0;
+        
+        // 스테이지 난이도 적용: 스테이지가 오를수록 시간 단축 (최대 15초, 최소 6초)
+        maxTimePerSentence = Math.max(15 - (currentStage - 1) * 1.5, 6);
+        
+        // 스테이지별 고유 문장 은행에서 문장 추출
+        currentSentences = getStageSentences(currentStage);
+        
+        // 하트 UI 동기화
+        updateHeartsUI();
+        
+        loadNextSentence();
+    }    function loadNextSentence() {
+        if (currentSentenceIndex >= 5) {
+            // 5개 문장을 전부 다 치면 스테이지 클리어!
+            clearInterval(timerId);
+            playSound('clear');
+            currentStage++;
+            // 달리기 화면으로 복귀하여 다음 스테이지 진행
+            enterRunStage();
+            return;
+        }
+
+        // 입력 데이터 채우고 커서 포커스
+        targetSentenceDisp.innerText = currentSentences[currentSentenceIndex];
+        progressDisp.innerText = `${currentSentenceIndex + 1} / 5`;
+        typeInput.value = '';
+        typeInput.focus();
+
+        // 타이머 초기화
+        timeLeft = maxTimePerSentence;
+        updateTimerUI();
+
+        clearInterval(timerId);
+        timerId = setInterval(() => {
+            timeLeft -= 0.1;
+            if (timeLeft <= 0) {
+                timeLeft = 0;
+                updateTimerUI();
+                clearInterval(timerId);
+                handleWrong(); // 시간 초과 시 오타 처리
+            } else {
+                updateTimerUI();
+                if (Math.ceil(timeLeft) % 1 === 0 && timeLeft > 0.1) {
+                    // 남은 시간 틱 피드백용 미세 틱음 (옵션)
+                }
+            }
+        }, 100);
+    }
+
+    function updateTimerUI() {
+        const ratio = Math.max(timeLeft / maxTimePerSentence, 0);
+        timerBar.style.width = `${ratio * 235}px`;
+        timerText.innerText = Math.ceil(timeLeft);
+        
+        // 시간이 3초 미만일 때는 경고색(빨간색)으로 게이지 변경
+        if (timeLeft < 3.5) {
+            timerBar.style.backgroundColor = '#ff3333';
+        } else {
+            timerBar.style.backgroundColor = '#ffcc00';
+        }
+    }
+
+    // 판정 (엔터 키 또는 입력 버튼 클릭 시)
+    function checkAnswer() {
+        const answer = targetSentenceDisp.innerText.trim();
+        const userInput = typeInput.value.trim();
+
+        if (userInput === '') return; // 빈 칸이면 무시
+
+        if (answer === userInput) {
+            // 정답!
+            playSound('correct');
+            typeInput.classList.remove('input-wrong');
+            currentSentenceIndex++;
+            loadNextSentence();
+        } else {
+            // 오타: 삑 효과음 + 하트 1 감소 + 입력창 빨간 테두리 + 입력 초기화 (같은 문장 재도전)
+            handleWrong();
+        }
+    }
+
+    // ※ 한글 IME 조합 특성상 실시간 글자 비교 불가 → Enter 키 입력 시에만 정오답 판정
+
+    // 오타 또는 시간초과 처리: 삑 효과음 + 하트 1 감소
+    function handleWrong() {
+        playSound('wrong');
+
+        // 화면 빨간 쉐이크 효과
+        gameContainer.classList.add('wrong-shake');
+        setTimeout(() => {
+            gameContainer.classList.remove('wrong-shake');
+        }, 300);
+
+        // 입력창 빨간 테두리 피드백
+        typeInput.classList.add('input-wrong');
+        setTimeout(() => typeInput.classList.remove('input-wrong'), 500);
+
+        lives--;
+        updateHeartsUI();
+
+        if (lives <= 0) {
+            clearInterval(timerId);
+            stopBGM(); // 배경음악 중단
+            playSound('gameover');
+            showScreen('gameover');
+        } else {
+            // 입력창 비우고 같은 문장 재도전
+            typeInput.value = '';
+            typeInput.focus();
+        }
+    }
+
+    // 하트 개수 업데이트 (오버레이 패치를 보여줘서 기존 이미지를 덮고 빈 하트 / 빨간 하트 표시)
+    function updateHeartsUI() {
+        const redHeartSVG = `<svg viewBox="0 0 9 9" width="32" height="32" style="image-rendering: pixelated;"><path d="M2,0 h2 v1 h-2 z M5,0 h2 v1 h-2 z M1,1 h1 v1 h-1 z M4,1 h1 v1 h-1 z M7,1 h1 v1 h-1 z M0,2 h1 v3 h-1 z M8,2 h1 v3 h-1 z M1,5 h1 v1 h-1 z M7,5 h1 v1 h-1 z M2,6 h1 v1 h-1 z M6,6 h1 v1 h-1 z M3,7 h1 v1 h-1 z M5,7 h1 v1 h-1 z M4,8 h1 v1 h-1 z" fill="#000000" /><path d="M2,1 h2 v1 h-2 z M5,1 h2 v1 h-2 z M1,2 h7 v3 h-7 z M2,5 h5 v1 h-5 z M3,6 h3 v1 h-3 z M4,7 h1 v1 h-1 z" fill="#ff3333" /></svg>`;
+        const emptyHeartSVG = `<svg viewBox="0 0 9 9" width="32" height="32" style="image-rendering: pixelated;"><path d="M2,0 h2 v1 h-2 z M5,0 h2 v1 h-2 z M1,1 h1 v1 h-1 z M4,1 h1 v1 h-1 z M7,1 h1 v1 h-1 z M0,2 h1 v3 h-1 z M8,2 h1 v3 h-1 z M1,5 h1 v1 h-1 z M7,5 h1 v1 h-1 z M2,6 h1 v1 h-1 z M6,6 h1 v1 h-1 z M3,7 h1 v1 h-1 z M5,7 h1 v1 h-1 z M4,8 h1 v1 h-1 z" fill="#000000" /></svg>`;
+        
+        for (let i = 1; i <= 5; i++) {
+            const patch = document.getElementById(`heart-hide-${i}`);
+            if (i > lives) {
+                patch.innerHTML = emptyHeartSVG;
+            } else {
+                patch.innerHTML = redHeartSVG;
+            }
+        }
+    }
+
+    function resetHeartPatches() {
+        lives = 5;
+        updateHeartsUI();
+    }
+
+    // 메인으로 가기
+    function goToTitle() {
+        clearInterval(timerId);
+        stopBGM(); // 배경음악 중단
+        playSound('select');
+        lives = 5;
+        resetHeartPatches();
+        showScreen('title');
+    }
+</script>
+</body>
+</html>
