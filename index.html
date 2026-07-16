@@ -18,16 +18,20 @@
 
         body {
             background-color: #0c0f12;
-            display: flex;
-            justify-content: center;
-            align-items: center;
+            margin: 0;
+            padding: 0;
+            width: 100vw;
             height: 100vh;
             overflow: hidden;
+            position: relative;
         }
 
         /* 16:9 비율 유지용 가상 캔버스 컨테이너 */
         #game-container {
-            position: relative;
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
             width: 1280px;
             height: 720px;
             background-color: #000;
@@ -370,9 +374,9 @@
             border-color: #ff3333 !important;
         }
         @keyframes wrong-shake-anim {
-            0%, 100% { transform: translateX(0); }
-            20%, 60% { transform: translateX(-10px); }
-            40%, 80% { transform: translateX(10px); }
+            0%, 100% { left: 50%; }
+            20%, 60% { left: calc(50% - 10px); }
+            40%, 80% { left: calc(50% + 10px); }
         }
 
         /* --- 5. 게임 오버 화면 --- */
@@ -465,6 +469,26 @@
 </div>
 
 <script>
+    // --- 화면 반응형 자동 크기 조절 (16:9 비율 유지) ---
+    function resizeGame() {
+        const container = document.getElementById('game-container');
+        if (!container) return;
+        const targetWidth = 1280;
+        const targetHeight = 720;
+        
+        const windowWidth = window.innerWidth;
+        const windowHeight = window.innerHeight;
+        
+        const scale = Math.min(windowWidth / targetWidth, windowHeight / targetHeight);
+        
+        container.style.transform = `translate(-50%, -50%) scale(${scale})`;
+    }
+    
+    window.addEventListener('resize', resizeGame);
+    window.addEventListener('load', resizeGame);
+    document.addEventListener('DOMContentLoaded', resizeGame);
+    resizeGame(); // 즉시 실행
+
     // --- 레트로 사운드 오디오 신디사이저 (Web Audio API) ---
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
